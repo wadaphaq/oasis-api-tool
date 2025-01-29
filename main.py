@@ -5,16 +5,7 @@ import datetime
 import os
 import time
 import threading
-
-# ---------------------------------------
-# EXAMPLE node list (replace with real!)
-# ---------------------------------------
-ALL_NODES = [
-    "PINEFLT_2_B1",
-    "AVA_AVA.BPAT-APND",
-    "0096WD_7_N001",
-    # ... add more nodes as needed
-]
+import json
 
 class CAISODownloaderApp(tk.Tk):
     def __init__(self):
@@ -23,23 +14,32 @@ class CAISODownloaderApp(tk.Tk):
         self.title("CAISO LMP Downloader")
 
         # ----------------------------
+        # Load node list from JSON
+        # ----------------------------
+        # Adjust the path to match where your nodes.json file is located
+        json_file_path = "nodes.json"
+        try:
+            with open(json_file_path, "r") as f:
+                self.loaded_nodes = json.load(f)  # list of strings
+        except Exception as e:
+            messagebox.showerror("Error Loading nodes.json", f"Could not load nodes.json:\n{e}")
+            self.loaded_nodes = []
+        
+        # We'll append "ALL_NODES" as a special selection
+        # so the user can download everything in the list
+        self.node_options = self.loaded_nodes + ["ALL_NODES"]
+
+        # ----------------------------
         # Variables / State
         # ----------------------------
         self.start_date_var = tk.StringVar(value="2020-01-01")
         self.end_date_var = tk.StringVar(value="2020-12-31")
-        
-        # We'll use a Combobox for Node selection.
-        # We'll provide a few single nodes plus an "ALL_NODES" choice.
-        self.node_options = ALL_NODES + ["ALL_NODES"]  # user picks from these
-        self.node_var = tk.StringVar(value="TH_N001")  # default node
-
-        self.market_var = tk.StringVar(value="DAM")  # Could also be "RTM", "RUC", ...
+        self.node_var = tk.StringVar(value="ALL_NODES")  # default to ALL_NODES, or pick first in the list
+        self.market_var = tk.StringVar(value="DAM")      # Could also be "RTM", "RUC", etc.
         self.download_path_var = tk.StringVar(value=os.path.expanduser("~"))
-
-        # For controlling the thread
         self.downloading = False
         self.abort_flag = False
-        
+
         # ----------------------------
         # Create GUI components
         # ----------------------------
@@ -67,9 +67,15 @@ class CAISODownloaderApp(tk.Tk):
         lbl_node = ttk.Label(self, text="Node:")
         lbl_node.grid(row=2, column=0, padx=5, pady=5, sticky="e")
 
-        cmb_node = ttk.Combobox(self, textvariable=self.node_var, values=self.node_options, state="readonly")
+        cmb_node = ttk.Combobox(
+            self, 
+            textvariable=self.node_var, 
+            values=self.node_options, 
+            state="readonly",
+            width=30  # a bit wider to handle longer node names
+        )
         cmb_node.grid(row=2, column=1, padx=5, pady=5, sticky="w")
-        cmb_node.current(0)  # default to the first entry in node_options
+        # If desired, you could do: cmb_node.current(0)  # set first node as default
 
         # --- Row 3: Market selection ---
         lbl_market = ttk.Label(self, text="Market:")
@@ -96,8 +102,12 @@ class CAISODownloaderApp(tk.Tk):
         # --- Row 5: Progress bar ---
         self.progress_var = tk.DoubleVar(value=0)
         self.progress_bar = ttk.Progressbar(
-            self, orient="horizontal", length=250,
-            mode="determinate", maximum=100, variable=self.progress_var
+            self, 
+            orient="horizontal", 
+            length=250,
+            mode="determinate", 
+            maximum=100, 
+            variable=self.progress_var
         )
         self.progress_bar.grid(row=5, column=0, columnspan=2, padx=5, pady=5)
 
@@ -156,7 +166,7 @@ class CAISODownloaderApp(tk.Tk):
 
         # Determine the actual list of nodes to download
         if node_choice == "ALL_NODES":
-            nodes_to_download = ALL_NODES
+            nodes_to_download = self.loaded_nodes
         else:
             # Just a single node
             nodes_to_download = [node_choice]
@@ -243,7 +253,8 @@ class CAISODownloaderApp(tk.Tk):
             progress_percent = (completed_tasks / total_tasks) * 100
             self.update_progress(progress_percent)
 
-            time.sleep(10)  # Polite delay between requests
+            # Optional delay between requests
+            time.sleep(10)  # 10 seconds
 
         if self.abort_flag:
             messagebox.showwarning("Aborted", "Download was aborted by user.")
